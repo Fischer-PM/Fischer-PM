@@ -34,7 +34,7 @@ Static classification is a slow drift toward misalignment. The Tier 1 vendor who
 
 The vendor your team has a warm relationship with is not always the vendor most dependent on the platform. Relationship-based tiering looks like fairness and creates misalignment. It directs resources toward accessibility rather than impact.
 
-I've seen this pattern produce tier-1 treatment for a vendor making 20K calls per quarter because their partnership manager had a strong relationship with the team, and tier-2 treatment for a vendor making 2M calls per quarter because they were quiet and self-sufficient. The quiet, self-sufficient vendor is the one who actually needs the proactive deprecation notice — because when something breaks for them, the impact is real.
+This pattern produces tier-1 treatment for a vendor making 20K calls per quarter because their partnership manager had a strong relationship with the team, and tier-2 treatment for a vendor making 2M calls per quarter because they were quiet and self-sufficient. The quiet, self-sufficient vendor is the one who actually needs the proactive deprecation notice — because when something breaks for them, the impact is real.
 
 ## Communicating Tier Changes
 

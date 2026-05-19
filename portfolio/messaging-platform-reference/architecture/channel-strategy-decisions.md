@@ -8,7 +8,7 @@ I've seen this go wrong in both directions: teams that built rigid unified abstr
 
 ## The Forcing Questions
 
-Before committing to a unified abstraction, I ask three questions. The answers usually tell you whether unification is helping you or creating complexity you'll spend years working around.
+Before committing to a unified abstraction, I ask three questions. The answers usually reveal whether unification is reducing complexity or creating complexity that will take years to work around.
 
 **Can you express all channels in a shared message model?**
 
@@ -20,7 +20,7 @@ A shared message model that handles all of these honestly ends up with so many o
 
 SMS delivery status comes from carrier delivery reports, which are asynchronous, carrier-specific, and sometimes missing entirely. Email delivery is tracked through open events, bounce codes (hard and soft), and complaint events from ISPs — none of which have standardized timing. Push delivery depends on device token validity, OS-level delivery confirmation, and whether the device was online when the message was sent. In-app delivery is conditioned entirely on session presence: if the user isn't in the app, there's no delivery event at all.
 
-These failure modes don't overlap. A retry strategy that works for SMS (resend if no carrier delivery receipt within 5 minutes) is wrong for in-app (there's nothing to retry if the session ended). Encoding these into a single delivery contract requires so many carve-outs that the contract stops being meaningful.
+These failure modes don't overlap. A retry strategy that works for SMS — resend if no carrier delivery receipt within 5 minutes — is wrong for in-app, where there's nothing to retry if the session ended. Encoding all of this into a single delivery contract requires so many carve-outs that the contract stops being meaningful.
 
 **Do channels share failure modes?**
 
@@ -33,9 +33,9 @@ They don't. Carrier rejection, email domain blacklisting, push token expiry, and
 The places where channel-agnostic logic genuinely belongs in a shared layer:
 
 - **User preference management**: whether a user prefers push over SMS is a routing decision, not a channel-specific decision
-- **Consent and opt-out handling**: a suppression list should span channels; a user who opts out of marketing messages shouldn't receive them via SMS or email or push
+- **Consent and opt-out handling**: a suppression list should span channels; a user who opts out of marketing messages shouldn't receive them via SMS, email, or push
 - **Rate limiting across channels**: if a user's message frequency cap applies across all channels, that logic has to live somewhere shared
-- **Cross-channel deduplication**: suppressing a message a user already received via email from also being sent via push is a shared concern
+- **Cross-channel deduplication**: suppressing a message a user already received via email from also going out via push is a shared concern
 
 These are the right things to unify. They don't care what channel delivers the message, so they don't inherit any channel's constraints.
 
@@ -53,7 +53,7 @@ At that point, the unified abstraction is no longer reducing complexity — it's
 
 Treat a new channel as a new service that implements the same interface contract, not as an extension of an existing channel's code. The shared API surface should be stable; the channel-specific implementation behind it should be isolated.
 
-Before a new channel launches, I define its SLA separately: delivery rate targets, latency windows, failure mode classification, and monitoring ownership. Not after launch, when the defaults are already set and changing them is a negotiation. The channel-specific SLA goes into documentation before the first consumer onboards.
+Before a new channel launches, I define its SLA separately: delivery rate targets, latency windows, failure mode classification, and monitoring ownership. Not after launch, when the defaults are already set and changing them becomes a negotiation. The channel-specific SLA goes into documentation before the first consumer onboards.
 
 ---
 
@@ -61,4 +61,4 @@ Before a new channel launches, I define its SLA separately: delivery rate target
 
 "We should support X channel" is a valid product input that needs a delivery contract attached to it. It's true when there is demonstrated user need — not assumed need — and when you can make and keep a delivery commitment for that channel. It is not true when a stakeholder wants to use a trending channel because a competitor announced it, or because it tests well in a survey.
 
-I've held this line more than once. The channels that get added because of genuine user need and a defensible SLA get maintained and improved. The channels added because of stakeholder enthusiasm and no delivery contract become the ones that generate the most support load and the most complaints when they underperform.
+I've held this line more than once. The channels added because of genuine user need and a defensible SLA get maintained and improved. The channels added because of stakeholder enthusiasm with no delivery contract become the ones that generate the most support load and the most complaints when they underperform.
