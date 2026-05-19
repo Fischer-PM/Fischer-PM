@@ -8,9 +8,9 @@ A stakeholder who raises a concern in week eight of a twelve-week project can st
 
 ## Blocking vs. Advisory Authority
 
-**Blocking authority** means a stakeholder can stop the launch. Their unresolved objection is sufficient to prevent go-live. This is typically legal (for regulatory interpretation), BSA/AML compliance (for anti-money-laundering programs), and in some firms, a Chief Compliance Officer or designated regulatory sign-off role.
+**Blocking authority** means a stakeholder can stop the launch. Their unresolved objection is sufficient to prevent go-live. This is typically legal (for regulatory interpretation), the primary compliance function overseeing the product domain, and in some firms, a designated regulatory sign-off role at the leadership level.
 
-**Advisory authority** means a stakeholder can raise concerns and those concerns must be documented and considered — but they cannot unilaterally block the launch. This often includes business compliance, product risk, and line-of-business compliance officers who implement policy rather than set it.
+**Advisory authority** means a stakeholder can raise concerns and those concerns must be documented and considered — but they cannot unilaterally block the launch. This often includes business-side compliance, product risk, and line-of-business compliance officers who implement policy rather than set it.
 
 The practical implication: identify both lists at the start of the project, write them down, and confirm them with each stakeholder's manager if there's any ambiguity. You want to find out that someone has blocking authority at kick-off, not when they send a hold request in the final week.
 

@@ -1,15 +1,15 @@
 Playbooks and decision frameworks for shipping 0→1 products in regulated environments — where the PM's job is not to fight compliance, but to maintain velocity while satisfying it.
 
-Drawn from working in compliance-gated product environments including KYC/CDD workflows in commercial banking.
+Drawn from working in compliance-gated product environments including regulated information collection workflows.
 
 ---
 
 ## Table of Contents
 
-- **KYC/CDD**
-  - [Compressing a Week-Long Process to Under 20 Minutes: A KYC/CDD Teardown](./kyc-cdd/time-compression-teardown.md)
-  - [Mapping Regulatory Stakeholder Authority](./kyc-cdd/regulatory-stakeholder-map.md)
-  - [Piloting in Regulated Environments](./kyc-cdd/pilot-strategy.md)
+- **Regulated Information Collection**
+  - [Compressing a Multi-Day Regulatory Information Collection Process: A Teardown](./information-collection/time-compression-teardown.md)
+  - [Mapping Regulatory Stakeholder Authority](./information-collection/regulatory-stakeholder-map.md)
+  - [Piloting in Regulated Environments](./information-collection/pilot-strategy.md)
 - **Launch Mechanics**
   - [The PM-to-Legal Handshake Protocol](./launch-mechanics/compliance-handshake-protocol.md)
 - **Lessons**
