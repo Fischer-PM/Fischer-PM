@@ -36,4 +36,18 @@ How much of the PM role is bottlenecked on the quality and speed of the thinking
 
 ---
 
-[LinkedIn](https://www.linkedin.com/in/stephen-fischer94) · [Claude-Skills →](https://github.com/Fischer-PM/Claude-Skills)
+## Portfolio
+
+| Repo | Focus |
+|---|---|
+| [platform-pm-playbook](https://github.com/Fischer-PM/Fischer-PM/tree/main/portfolio/platform-pm-playbook) | API governance, deprecation strategy, SLA management at scale |
+| [regulated-product-launches](https://github.com/Fischer-PM/Fischer-PM/tree/main/portfolio/regulated-product-launches) | 0→1 products in regulated environments: KYC/CDD, compliance-gated launches |
+| [ai-product-thinking](https://github.com/Fischer-PM/Fischer-PM/tree/main/portfolio/ai-product-thinking) | AI PM frameworks: evals, probabilistic products, human-in-the-loop design |
+| [product-strategy-artifacts](https://github.com/Fischer-PM/Fischer-PM/tree/main/portfolio/product-strategy-artifacts) | Prioritization, roadmap communication, platform-vs-product tension management |
+| [developer-ecosystem-strategy](https://github.com/Fischer-PM/Fischer-PM/tree/main/portfolio/developer-ecosystem-strategy) | Developer portal and API ecosystem strategy at 4B+ annual API calls |
+| [messaging-platform-reference](https://github.com/Fischer-PM/Fischer-PM/tree/main/portfolio/messaging-platform-reference) | Large-scale messaging: architecture, SLA design, channel strategy, failure modes |
+| [Claude-Skills](https://github.com/Fischer-PM/Claude-Skills) | Full PM toolkit built on Claude: 32 skills, 40+ agents, PDLC orchestrators |
+
+---
+
+[LinkedIn](https://www.linkedin.com/in/stephen-fischer94) · [platform-pm-playbook →](https://github.com/Fischer-PM/Fischer-PM/tree/main/portfolio/platform-pm-playbook)
