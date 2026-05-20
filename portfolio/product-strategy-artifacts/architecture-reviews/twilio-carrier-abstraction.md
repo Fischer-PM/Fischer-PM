@@ -14,7 +14,7 @@ Twilio sits between application developers and carrier networks, abstracting car
 
 **Delivery receipt normalization.** Carriers return delivery status in incompatible formats. Twilio normalizes these into a consistent webhook payload. The developer receives a single event schema regardless of which carrier delivered the message, which makes delivery rate monitoring tractable.
 
-**Carrier A/B testing.** Route 50% of messages through one carrier, 50% through another, compare delivery rates by country. This kind of infrastructure experimentation — which would be operationally impossible with direct carrier integrations — becomes a configuration decision with Twilio.
+**A/B testing across carriers.** Route 50% of messages through Carrier A, 50% through Carrier B, compare delivery rates by country. This kind of infrastructure experimentation — which would be operationally impossible with direct carrier integrations — becomes a configuration decision with Twilio.
 
 ## What This Makes Hard
 
