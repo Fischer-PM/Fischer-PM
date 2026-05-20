@@ -19,6 +19,9 @@ Drawn from managing messaging platforms processing billions of messages across S
 **Strategy**
 - [Run-the-Engine Overhead: The Hidden Cost of Scale](strategy/run-the-engine-overhead.md)
 
+**Postmortems**
+- [Six Hours of Silent Loss](postmortems/silent-loss-incident.md) — Simulated: a notification platform outage where monitoring watched queue depth, not queue age, for six hours
+
 ---
 
 ## Guiding Perspective

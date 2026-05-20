@@ -16,6 +16,31 @@ These artifacts were developed across platform PM work in infrastructure product
 
 **Product Thinking**
 - [The Platform-Product Tension Nobody Talks About Honestly](./product-thinking/platform-vs-product-tension.md)
+- [Eigenquestions: High-Leverage Strategy Questions Grounded in Rumelt](./product-thinking/eigenquestions.md)
+
+**Product Teardowns**
+- [Stripe](./teardowns/stripe.md) — How seven lines of code became a payment moat
+- [Twilio](./teardowns/twilio.md) — Why the adoption unit and the buying unit being different was the whole strategy
+- [Linear](./teardowns/linear.md) — How refusing to build most of Jira became a competitive position
+- [PagerDuty](./teardowns/pagerduty.md) — How to build a product engineers hate to be paged by and can't stop depending on
+- [Datadog](./teardowns/datadog.md) — Platform strategy as a sequencing problem, not a vision problem
+
+**Case Studies** *(simulated)*
+- [API Deprecation Failure](./case-studies/api-deprecation-failure.md) — When silence from API consumers is treated as confirmation, and what breaks
+- [Notification System That Didn't Scale](./case-studies/notification-system-scaling.md) — A throttling fix that inherited a broken classification layer
+- [Self-Serve Onboarding Debt](./case-studies/self-serve-onboarding-debt.md) — 68% completion rate masking 6x ticket volume growth
+- [AI Feature Shipped Too Early](./case-studies/ai-feature-that-shipped-too-early.md) — 87% accuracy on the wrong dataset, and what it cost
+- [Buyer-User Mismatch](./case-studies/internal-tool-buyer-user-mismatch.md) — +42 NPS from users, three enterprise non-renewals from buyers
+
+**Architecture Reviews**
+- [Slack](./architecture-reviews/slack-architecture.md) — Why the channel model works at 50 people and degrades at 5,000
+- [Stripe](./architecture-reviews/stripe-payment-pipeline.md) — Idempotency as a product constraint, not an engineering choice
+- [Twilio](./architecture-reviews/twilio-carrier-abstraction.md) — Why "delivered" is a probabilistic signal, not a guarantee
+- [Kafka](./architecture-reviews/kafka-event-streaming.md) — Consumer-managed offsets and what that implies for product decisions
+- [Notion](./architecture-reviews/notion-block-model.md) — Block-based architecture optimized for expressiveness, not governance
+
+**Glossary**
+- [Product Management Glossary](./glossary/product-glossary.md) — 40+ terms defined precisely, each with a "common misuse" callout
 
 ---
 

@@ -20,6 +20,13 @@ My background spans platform product management across large-scale financial ser
 - [Protecting the Critical Path](scalability/critical-path-protection.md) — The three moments the critical path is most at risk and how to defend it before the meeting starts
 - [SLA Improvement Teardown](scalability/sla-improvement-teardown.md) — Four categories of SLA degradation and why misidentifying the type is the most common failure mode
 
+### Postmortems
+- [API Migration Postmortem](postmortems/api-migration-postmortem.md) — Simulated: a v1 deprecation that broke three enterprise consumers on cutoff day, and what the process failed to catch
+
+### Glossary
+- [AWS Services: A PM Reference](glossary/aws-glossary.md) — What each service does, the product problem it solves, and one constraint a PM should know before it's in production
+- [Architecture Concepts: A PM Reference](glossary/architecture-glossary.md) — 35+ distributed systems terms defined in product language, with common misunderstandings called out
+
 ---
 
 ## Guiding Perspective
