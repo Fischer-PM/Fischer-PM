@@ -20,6 +20,12 @@ My background spans platform product management across large-scale financial ser
 - [Protecting the Critical Path](scalability/critical-path-protection.md) — The three moments the critical path is most at risk and how to defend it before the meeting starts
 - [SLA Improvement Teardown](scalability/sla-improvement-teardown.md) — Four categories of SLA degradation and why misidentifying the type is the most common failure mode
 
+### Architecture Decision Records *(simulated)*
+- [ADR-001: Async Queues Over Synchronous APIs](adrs/adr-001-async-queues-over-sync-apis.md) — How replacing a synchronous service chain with SQS queues stopped cascade failures (and what the team got wrong about monitoring)
+- [ADR-002: Kafka for Fanout, SQS for Delivery](adrs/adr-002-kafka-vs-sqs-notification-fanout.md) — When and why to split notification infrastructure across two queue systems, with architecture diagrams
+- [ADR-003: Centralizing Notifications Across 7 Products](adrs/adr-003-centralized-notification-service.md) — The compliance win, the blast radius problem, and why edge cases are where the requirements actually live
+- [ADR-004: Eventual Consistency for User Preferences](adrs/adr-004-eventual-consistency-user-preferences.md) — Why "eventual" needs a defined upper bound, and what happens when propagation stops silently
+
 ### Postmortems
 - [API Migration Postmortem](postmortems/api-migration-postmortem.md) — Simulated: a v1 deprecation that broke three enterprise consumers on cutoff day, and what the process failed to catch
 

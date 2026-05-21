@@ -31,6 +31,16 @@ These artifacts were developed across platform PM work in infrastructure product
 - [Self-Serve Onboarding Debt](./case-studies/self-serve-onboarding-debt.md) — 68% completion rate masking 6x ticket volume growth
 - [AI Feature Shipped Too Early](./case-studies/ai-feature-that-shipped-too-early.md) — 87% accuracy on the wrong dataset, and what it cost
 - [Buyer-User Mismatch](./case-studies/internal-tool-buyer-user-mismatch.md) — +42 NPS from users, three enterprise non-renewals from buyers
+- [Marketplace Liquidity Collapse](./case-studies/marketplace-liquidity-collapse.md) — Simulated: removing a supply-side subsidy that had silently become a retention mechanism
+- [Notification Fatigue Campaign](./case-studies/notification-fatigue-campaign.md) — Simulated: re-engagement that worked for 3 weeks and destroyed the channel
+- [The Activation Paradox](./case-studies/activation-paradox.md) — Simulated: shipping the top feature request and watching activation drop 14%
+
+**Feature Analyses** *(real companies, public information)*
+- [Netflix Password Sharing Crackdown](./feature-analyses/netflix-password-sharing-crackdown.md) — How a tolerated behavior became a subscriber growth lever, and why timing mattered
+- [Duolingo Streak Mechanics](./feature-analyses/duolingo-streak-mechanics.md) — When a retention mechanic becomes the product, and what that costs long-term
+- [Shopify's Shop App](./feature-analyses/shopify-shop-app.md) — Why a B2B infrastructure company built a consumer product
+- [Spotify Discover Weekly](./feature-analyses/spotify-discover-weekly.md) — Algorithmic discovery as a label relationship problem
+- [Twitter/X Community Notes](./feature-analyses/twitter-community-notes.md) — Crowdsourced fact-checking as platform governance strategy
 
 **Architecture Reviews**
 - [Slack](./architecture-reviews/slack-architecture.md) — Why the channel model works at 50 people and degrades at 5,000
