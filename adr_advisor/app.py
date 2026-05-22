@@ -1,22 +1,19 @@
 """
 ADR Advisor — Streamlit UI.
-Generates Architecture Decision Records in the style of the existing portfolio ADRs.
 Run: streamlit run app.py
-Requires ANTHROPIC_API_KEY in .env or sidebar input.
+
+Backends:
+  Ollama (local, free) — requires Ollama running at localhost:11434
+  Claude API — requires ANTHROPIC_API_KEY
 """
 
 import os
 
-import anthropic
 import streamlit as st
 from dotenv import load_dotenv
 
-from agent import (
-    analyze_decision,
-    generate_adr_stream,
-    save_adr,
-    suggest_company_name,
-)
+from llm import OLLAMA_DEFAULT_MODEL, Backend, make_client
+from agent import analyze_decision, generate_adr_stream, save_adr, suggest_company_name
 
 load_dotenv()
 
@@ -30,11 +27,7 @@ DOMAINS = [
     "Other",
 ]
 
-st.set_page_config(
-    page_title="ADR Advisor",
-    page_icon="📐",
-    layout="wide",
-)
+st.set_page_config(page_title="ADR Advisor", page_icon="📐", layout="wide")
 
 
 def _init_session_state() -> None:
@@ -44,6 +37,7 @@ def _init_session_state() -> None:
         "adr": "",
         "adr_company": "",
         "adr_decision": "",
+        "show_analysis": False,
         "error": None,
     }
     for key, value in defaults.items():
@@ -57,133 +51,117 @@ def _reset_state() -> None:
     st.session_state.adr = ""
     st.session_state.adr_company = ""
     st.session_state.adr_decision = ""
+    st.session_state.show_analysis = False
     st.session_state.error = None
 
 
 _init_session_state()
 
-# --- SIDEBAR ---
 with st.sidebar:
     st.title("ADR Advisor")
     st.markdown(
         "Generates Architecture Decision Records in retrospective style — "
-        "complete with Mermaid diagrams and honest consequences. "
-        "Saves to `portfolio/generated-adrs/`."
+        "Mermaid diagrams, honest consequences. Saves to `portfolio/generated-adrs/`."
     )
     st.divider()
 
-    api_key = st.text_input(
-        "Anthropic API Key",
-        type="password",
-        value=os.getenv("ANTHROPIC_API_KEY", ""),
-        help="Get your key at console.anthropic.com",
+    backend: Backend = st.radio(
+        "Backend",
+        options=["ollama", "claude"],
+        format_func=lambda x: "Ollama (local, free)" if x == "ollama" else "Claude API",
+        index=0,
     )
+
+    if backend == "ollama":
+        model = st.text_input("Ollama model", value=OLLAMA_DEFAULT_MODEL)
+        api_key = ""
+        st.caption("Ollama must be running at localhost:11434.")
+    else:
+        model = ""
+        api_key = st.text_input(
+            "Anthropic API Key", type="password", value=os.getenv("ANTHROPIC_API_KEY", "")
+        )
 
     st.divider()
     if st.session_state.adr_complete:
         st.success("ADR ready")
     else:
         st.markdown("**Status:** Ready")
+    st.markdown("**Style:** Matches `portfolio/platform-pm-playbook/adrs/`")
 
-    st.divider()
-    st.markdown(
-        "**Style reference:** Matches the four existing ADRs in "
-        "`portfolio/platform-pm-playbook/adrs/`"
-    )
-
-# --- MAIN ---
 st.title("ADR Advisor")
 
 decision_input = st.text_area(
     "Describe the architectural decision",
     placeholder=(
         "e.g., We need to decide between synchronous REST calls vs. async queues "
-        "for inter-service communication in our notification pipeline. "
-        "Currently services call each other directly via HTTP and we're seeing "
-        "cascading failures under load."
+        "for inter-service communication in our notification pipeline."
     ),
     height=120,
 )
 
 col_company, col_domain = st.columns([2, 2])
-
 with col_company:
     company_input = st.text_input(
         "Fictional company name",
         placeholder=f"e.g., {suggest_company_name()} (leave blank to auto-assign)",
     )
-
 with col_domain:
     domain = st.selectbox("Domain", options=DOMAINS)
 
-can_run = bool(decision_input and api_key)
-run_button = st.button("Generate ADR", type="primary", disabled=not can_run)
+ready = bool(decision_input) and (backend == "ollama" or bool(api_key))
+run_button = st.button("Generate ADR", type="primary", disabled=not ready)
 
-if not api_key:
-    st.caption("Enter your Anthropic API key in the sidebar.")
-elif not decision_input:
-    st.caption("Describe the decision above.")
-
-# --- EXECUTION ---
-if run_button and can_run:
+if run_button and ready:
     _reset_state()
-
-    # Use provided company name or auto-assign one
     company_name = company_input.strip() if company_input.strip() else suggest_company_name()
     st.session_state.adr_company = company_name
     st.session_state.adr_decision = decision_input
 
-    client = anthropic.Anthropic(api_key=api_key)
+    try:
+        client = make_client(backend, api_key)
+    except Exception as e:  # noqa: BLE001
+        st.error(f"Failed to connect: {e}")
+        st.stop()
+
     progress = st.progress(0, text="Starting...")
     status = st.empty()
 
     try:
         status.markdown(f"**Step 1 / 2** — Analyzing decision for *{company_name}*...")
-        analysis = analyze_decision(client, decision_input, domain)
+        analysis = analyze_decision(client, backend, model, decision_input, domain)
         st.session_state.analysis = analysis
-        progress.progress(1 / 3, text="Analysis complete")
+        progress.progress(1 / 3)
 
         status.markdown("**Step 2 / 2** — Drafting ADR...")
         adr_area = st.empty()
         full_adr = ""
 
-        with generate_adr_stream(
-            client, decision_input, company_name, domain, analysis
-        ) as stream:
-            for text in stream.text_stream:
-                full_adr += text
-                adr_area.markdown(full_adr)
+        for text in generate_adr_stream(
+            client, backend, model, decision_input, company_name, domain, analysis
+        ):
+            full_adr += text
+            adr_area.markdown(full_adr)
 
         st.session_state.adr = full_adr
         st.session_state.adr_complete = True
         progress.progress(1.0, text="Complete")
         status.empty()
 
-    except anthropic.AuthenticationError:
-        st.session_state.error = "API key is invalid."
-        progress.empty()
-        status.empty()
-    except anthropic.RateLimitError:
-        st.session_state.error = "Rate limit reached. Wait a moment and try again."
-        progress.empty()
-        status.empty()
-    except anthropic.APIConnectionError as e:
-        st.session_state.error = f"Connection error: {e}"
-        progress.empty()
-        status.empty()
     except Exception as e:  # noqa: BLE001
-        st.session_state.error = f"Unexpected error ({type(e).__name__}): {e}"
+        err = str(e)
+        if "connection" in err.lower() or "refused" in err.lower():
+            st.session_state.error = "Cannot reach Ollama at localhost:11434. Run: ollama serve"
+        else:
+            st.session_state.error = f"Error ({type(e).__name__}): {e}"
         progress.empty()
         status.empty()
 
-# --- ERROR ---
 if st.session_state.error:
     st.error(st.session_state.error)
 
-# --- OUTPUT ---
 if st.session_state.adr_complete and st.session_state.adr:
     st.divider()
-
     col_save, col_dl, col_analysis, _ = st.columns([1, 1, 1, 3])
 
     with col_save:
@@ -208,11 +186,11 @@ if st.session_state.adr_complete and st.session_state.adr:
         )
 
     with col_analysis:
-        if st.button("Show Analysis", type="secondary"):
-            st.session_state.show_analysis = not st.session_state.get("show_analysis", False)
+        if st.button("Show Analysis"):
+            st.session_state.show_analysis = not st.session_state.show_analysis
 
-    if st.session_state.get("show_analysis") and st.session_state.analysis:
-        with st.expander("Decision Analysis (Step 1 output)", expanded=True):
+    if st.session_state.show_analysis and st.session_state.analysis:
+        with st.expander("Decision Analysis (Step 1)", expanded=True):
             st.markdown(f"```\n{st.session_state.analysis}\n```")
 
     st.markdown(st.session_state.adr)

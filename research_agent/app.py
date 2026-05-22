@@ -1,20 +1,19 @@
 """
-PM Research Agent — Streamlit UI and orchestration layer.
-Imports from agent.py for all Claude API logic.
+PM Research Agent — Streamlit UI.
+Run: streamlit run app.py
 
-Run:
-    streamlit run app.py
-
-Requires:
-    ANTHROPIC_API_KEY set in .env or entered via the sidebar.
+Backends:
+  Ollama (local, free) — requires Ollama running at localhost:11434
+    Install: https://ollama.com  |  Pull model: ollama pull llama3.1:8b
+  Claude API — requires ANTHROPIC_API_KEY, billed per use (~$0.05-0.10/run)
 """
 
 import os
 
-import anthropic
 import streamlit as st
 from dotenv import load_dotenv
 
+from llm import OLLAMA_DEFAULT_MODEL, Backend, make_client
 from agent import (
     compile_report_stream,
     generate_research_questions,
@@ -69,35 +68,40 @@ _init_session_state()
 # --- SIDEBAR ---
 with st.sidebar:
     st.title("PM Research Agent")
-    st.markdown(
-        "Generates PM-style research reports using Claude. "
-        "Reports are saved to `portfolio/research-reports/`."
-    )
+    st.markdown("Generates PM-style research reports. Saves to `portfolio/research-reports/`.")
     st.divider()
 
-    api_key = st.text_input(
-        "Anthropic API Key",
-        type="password",
-        value=os.getenv("ANTHROPIC_API_KEY", ""),
-        help="Get your key at console.anthropic.com. Or set ANTHROPIC_API_KEY in .env.",
+    backend: Backend = st.radio(
+        "Backend",
+        options=["ollama", "claude"],
+        format_func=lambda x: "Ollama (local, free)" if x == "ollama" else "Claude API",
+        index=0,
     )
 
-    st.divider()
+    if backend == "ollama":
+        model = st.text_input(
+            "Ollama model",
+            value=OLLAMA_DEFAULT_MODEL,
+            help="Run `ollama pull llama3.1:8b` to download. See ollama.com for options.",
+        )
+        api_key = ""
+        st.caption("Ollama must be running at localhost:11434.")
+    else:
+        model = ""
+        api_key = st.text_input(
+            "Anthropic API Key",
+            type="password",
+            value=os.getenv("ANTHROPIC_API_KEY", ""),
+            help="console.anthropic.com — ~$0.05–0.10/run",
+        )
 
+    st.divider()
     if st.session_state.research_complete:
         st.success("Research complete")
     else:
         st.markdown("**Status:** Ready")
 
-    st.divider()
-    st.markdown(
-        "**Cost estimate**\n\n"
-        "~$0.05–0.10 per run (Sonnet with prompt caching).\n\n"
-        "Prompt caching applies across all 6 API calls — "
-        "only the first call pays full system-prompt token cost."
-    )
-
-# --- MAIN AREA ---
+# --- MAIN ---
 st.title("PM Research Agent")
 
 col_topic, col_type = st.columns([3, 1])
@@ -111,89 +115,93 @@ with col_topic:
 with col_type:
     research_type = st.selectbox("Research type", options=RESEARCH_TYPES)
 
-can_run = bool(topic_input and api_key)
-run_button = st.button("Generate Report", type="primary", disabled=not can_run)
+ready = (backend == "ollama" and bool(topic_input)) or (
+    backend == "claude" and bool(topic_input and api_key)
+)
+run_button = st.button("Generate Report", type="primary", disabled=not ready)
 
-if not api_key:
-    st.caption("Enter your Anthropic API key in the sidebar to continue.")
+if backend == "claude" and not api_key:
+    st.caption("Enter your Anthropic API key in the sidebar.")
 elif not topic_input:
     st.caption("Enter a research topic above.")
 
-# --- RESEARCH EXECUTION ---
-if run_button and can_run:
+# --- EXECUTION ---
+if run_button and ready:
     _reset_state()
     st.session_state.report_topic = topic_input
     st.session_state.report_type = research_type
 
-    client = anthropic.Anthropic(api_key=api_key)
-    progress = st.progress(0, text="Starting research...")
+    try:
+        client = make_client(backend, api_key)
+    except Exception as e:  # noqa: BLE001
+        st.error(f"Failed to connect to {backend}: {e}")
+        st.stop()
+
+    progress = st.progress(0, text="Starting...")
     status = st.empty()
 
     try:
-        # Step 1 — Generate questions
         status.markdown("**Step 1 / 6** — Generating research questions...")
-        questions = generate_research_questions(client, topic_input, research_type)
+        questions = generate_research_questions(client, backend, model, topic_input, research_type)
         st.session_state.questions = questions
-        progress.progress(1 / 7, text="Research questions ready")
+        progress.progress(1 / 7, text="Questions ready")
 
-        # Steps 2–6 — Research each question
         findings = []
         for i, question in enumerate(questions):
-            status.markdown(
-                f"**Step {i + 2} / 6** — Researching: _{question}_"
-            )
+            status.markdown(f"**Step {i + 2} / 6** — Researching: _{question}_")
             finding = research_question(
-                client, topic_input, research_type, question, i
+                client, backend, model, topic_input, research_type, question, i
             )
             findings.append(finding)
             st.session_state.findings = findings
             progress.progress((i + 2) / 7, text=f"Question {i + 1} of 5 complete")
 
-        # Step 7 — Compile and stream final report
         status.markdown("**Step 6 / 6** — Compiling report...")
         report_area = st.empty()
         full_report = ""
 
-        with compile_report_stream(
-            client, topic_input, research_type, questions, findings
-        ) as stream:
-            for text in stream.text_stream:
-                full_report += text
-                report_area.markdown(full_report)
+        for text in compile_report_stream(
+            client, backend, model, topic_input, research_type, questions, findings
+        ):
+            full_report += text
+            report_area.markdown(full_report)
 
         st.session_state.report = full_report
         st.session_state.research_complete = True
         progress.progress(1.0, text="Complete")
         status.empty()
 
-    except anthropic.AuthenticationError:
-        st.session_state.error = (
-            "API key is invalid. Check your key at console.anthropic.com."
-        )
-        progress.empty()
-        status.empty()
-    except anthropic.RateLimitError:
-        st.session_state.error = "Rate limit reached. Wait a moment and try again."
-        progress.empty()
-        status.empty()
-    except anthropic.APIConnectionError as e:
-        st.session_state.error = f"Connection error: {e}"
-        progress.empty()
-        status.empty()
-    except ValueError as e:
-        st.session_state.error = f"Research generation error: {e}"
-        progress.empty()
-        status.empty()
     except Exception as e:  # noqa: BLE001
-        st.session_state.error = f"Unexpected error ({type(e).__name__}): {e}"
+        # Import here to keep error messages specific when anthropic is available
+        try:
+            import anthropic as _anthropic
+            if isinstance(e, _anthropic.AuthenticationError):
+                st.session_state.error = "Claude API key is invalid."
+            elif isinstance(e, _anthropic.RateLimitError):
+                st.session_state.error = "Rate limit reached. Wait a moment and try again."
+            elif isinstance(e, _anthropic.APIConnectionError):
+                st.session_state.error = f"Claude connection error: {e}"
+            else:
+                raise
+        except (ImportError, Exception):
+            pass
+        if not st.session_state.error:
+            err_str = str(e)
+            if "connection" in err_str.lower() or "refused" in err_str.lower():
+                st.session_state.error = (
+                    "Cannot reach Ollama at localhost:11434. "
+                    "Is Ollama running? Start it with: ollama serve"
+                )
+            else:
+                st.session_state.error = f"Error ({type(e).__name__}): {e}"
         progress.empty()
         status.empty()
 
-# --- ERROR DISPLAY ---
+# --- ERROR ---
 if st.session_state.error:
     st.error(st.session_state.error)
 
-# --- REPORT DISPLAY ---
+# --- OUTPUT ---
 if st.session_state.research_complete and st.session_state.report:
     st.divider()
 

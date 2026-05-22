@@ -1,31 +1,26 @@
 """
 PM Digest Generator — Streamlit UI.
 Run: streamlit run app.py
-Requires ANTHROPIC_API_KEY in .env or sidebar input.
+
+Backends:
+  Ollama (local, free) — requires Ollama running at localhost:11434
+  Claude API — requires ANTHROPIC_API_KEY
 """
 
 import os
+from datetime import date
 
-import anthropic
 import streamlit as st
 from dotenv import load_dotenv
 
-from agent import (
-    compile_digest_stream,
-    parse_topics,
-    research_topic,
-    save_digest,
-)
+from llm import OLLAMA_DEFAULT_MODEL, Backend, make_client
+from agent import compile_digest_stream, parse_topics, research_topic, save_digest
 
 load_dotenv()
 
 TIME_HORIZONS = ["This week", "This month", "Last quarter"]
 
-st.set_page_config(
-    page_title="PM Digest",
-    page_icon="📰",
-    layout="wide",
-)
+st.set_page_config(page_title="PM Digest", page_icon="📰", layout="wide")
 
 
 def _init_session_state() -> None:
@@ -51,66 +46,65 @@ def _reset_state() -> None:
 
 _init_session_state()
 
-# --- SIDEBAR ---
 with st.sidebar:
     st.title("PM Digest")
-    st.markdown(
-        "Generates a PM briefing across multiple topics using Claude. "
-        "Saves to `portfolio/digests/`."
-    )
+    st.markdown("Generates a PM briefing across topics. Saves to `portfolio/digests/`.")
     st.divider()
 
-    api_key = st.text_input(
-        "Anthropic API Key",
-        type="password",
-        value=os.getenv("ANTHROPIC_API_KEY", ""),
-        help="Get your key at console.anthropic.com",
+    backend: Backend = st.radio(
+        "Backend",
+        options=["ollama", "claude"],
+        format_func=lambda x: "Ollama (local, free)" if x == "ollama" else "Claude API",
+        index=0,
     )
+
+    if backend == "ollama":
+        model = st.text_input("Ollama model", value=OLLAMA_DEFAULT_MODEL)
+        api_key = ""
+        st.caption("Ollama must be running at localhost:11434.")
+    else:
+        model = ""
+        api_key = st.text_input(
+            "Anthropic API Key", type="password", value=os.getenv("ANTHROPIC_API_KEY", "")
+        )
 
     st.divider()
     if st.session_state.digest_complete:
         st.success("Digest ready")
     else:
         st.markdown("**Status:** Ready")
+    st.caption("Based on training knowledge. Verify before acting.")
 
-    st.divider()
-    st.caption(
-        "Based on Claude's training knowledge. "
-        "Verify specifics before acting on them."
-    )
-
-# --- MAIN ---
 st.title("PM Digest Generator")
 
 col_topics, col_horizon = st.columns([3, 1])
-
 with col_topics:
     topics_input = st.text_area(
         "Topics to cover",
-        placeholder="One per line, or comma-separated.\ne.g.\nStripe vs. Adyen competitive positioning\nOpenAI API pricing changes\nKafka vs Pulsar adoption trends",
+        placeholder="One per line, or comma-separated.\ne.g.\nStripe vs. Adyen competitive positioning\nOpenAI API pricing changes",
         height=130,
     )
-
 with col_horizon:
     time_horizon = st.selectbox("Time horizon", options=TIME_HORIZONS)
     st.caption("Up to 6 topics.")
 
 topics_parsed = parse_topics(topics_input) if topics_input else []
-can_run = bool(topics_parsed and api_key)
-run_button = st.button("Generate Digest", type="primary", disabled=not can_run)
+ready = bool(topics_parsed) and (backend == "ollama" or bool(api_key))
+run_button = st.button("Generate Digest", type="primary", disabled=not ready)
 
 if topics_parsed:
-    st.caption(f"Topics detected: {', '.join(topics_parsed)}")
+    st.caption(f"Topics: {', '.join(topics_parsed)}")
 
-if not api_key:
-    st.caption("Enter your Anthropic API key in the sidebar.")
-
-# --- EXECUTION ---
-if run_button and can_run:
+if run_button and ready:
     _reset_state()
 
-    client = anthropic.Anthropic(api_key=api_key)
-    total_steps = len(topics_parsed) + 1  # +1 for compile
+    try:
+        client = make_client(backend, api_key)
+    except Exception as e:  # noqa: BLE001
+        st.error(f"Failed to connect: {e}")
+        st.stop()
+
+    total_steps = len(topics_parsed) + 1
     progress = st.progress(0, text="Starting...")
     status = st.empty()
 
@@ -118,19 +112,17 @@ if run_button and can_run:
         findings = []
         for i, topic in enumerate(topics_parsed):
             status.markdown(f"**Step {i + 1} / {total_steps}** — Researching: _{topic}_")
-            finding = research_topic(client, topic, time_horizon)
+            finding = research_topic(client, backend, model, topic, time_horizon)
             findings.append(finding)
-            st.session_state.findings = findings
-            progress.progress((i + 1) / (total_steps + 1), text=f"Topic {i + 1} of {len(topics_parsed)} done")
+            progress.progress((i + 1) / (total_steps + 1))
 
         status.markdown(f"**Step {total_steps} / {total_steps}** — Compiling digest...")
         digest_area = st.empty()
         full_digest = ""
 
-        with compile_digest_stream(client, topics_parsed, findings, time_horizon) as stream:
-            for text in stream.text_stream:
-                full_digest += text
-                digest_area.markdown(full_digest)
+        for text in compile_digest_stream(client, backend, model, topics_parsed, findings, time_horizon):
+            full_digest += text
+            digest_area.markdown(full_digest)
 
         st.session_state.topics = topics_parsed
         st.session_state.digest = full_digest
@@ -138,40 +130,26 @@ if run_button and can_run:
         progress.progress(1.0, text="Complete")
         status.empty()
 
-    except anthropic.AuthenticationError:
-        st.session_state.error = "API key is invalid."
-        progress.empty()
-        status.empty()
-    except anthropic.RateLimitError:
-        st.session_state.error = "Rate limit reached. Wait a moment and try again."
-        progress.empty()
-        status.empty()
-    except anthropic.APIConnectionError as e:
-        st.session_state.error = f"Connection error: {e}"
-        progress.empty()
-        status.empty()
     except Exception as e:  # noqa: BLE001
-        st.session_state.error = f"Unexpected error ({type(e).__name__}): {e}"
+        err = str(e)
+        if "connection" in err.lower() or "refused" in err.lower():
+            st.session_state.error = "Cannot reach Ollama at localhost:11434. Run: ollama serve"
+        else:
+            st.session_state.error = f"Error ({type(e).__name__}): {e}"
         progress.empty()
         status.empty()
 
-# --- ERROR ---
 if st.session_state.error:
     st.error(st.session_state.error)
 
-# --- OUTPUT ---
 if st.session_state.digest_complete and st.session_state.digest:
     st.divider()
-
     col_save, col_dl, _ = st.columns([1, 1, 4])
 
     with col_save:
         if st.button("Save to Portfolio", type="secondary"):
             try:
-                saved_path = save_digest(
-                    st.session_state.topics,
-                    st.session_state.digest,
-                )
+                saved_path = save_digest(st.session_state.topics, st.session_state.digest)
                 st.success(f"Saved: `{saved_path.name}`")
             except OSError as e:
                 st.error(f"Save failed: {e}")
@@ -180,7 +158,7 @@ if st.session_state.digest_complete and st.session_state.digest:
         st.download_button(
             label="Download .md",
             data=st.session_state.digest.encode("utf-8"),
-            file_name=f"pm-digest-{__import__('datetime').date.today().isoformat()}.md",
+            file_name=f"pm-digest-{date.today().isoformat()}.md",
             mime="text/markdown",
         )
 

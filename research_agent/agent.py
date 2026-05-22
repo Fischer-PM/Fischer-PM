@@ -1,16 +1,17 @@
 """
-PM Research Agent — Claude API orchestration layer.
-No Streamlit dependencies. All functions are independently testable.
+PM Research Agent — LLM orchestration layer.
+Supports Ollama (local) and Claude API backends via llm.py.
+No Streamlit dependencies. All functions independently testable.
 """
 
 import re
 from datetime import date
 from pathlib import Path
+from typing import Generator
 
-import anthropic
+from llm import Backend, complete, stream_complete
 
 RESEARCH_REPORTS_DIR = Path(__file__).parent.parent / "portfolio" / "research-reports"
-MODEL = "claude-sonnet-4-6"
 MAX_TOKENS_QUESTION = 1200
 MAX_TOKENS_COMPILE = 4000
 
@@ -73,26 +74,14 @@ TYPE_GUIDANCE = {
 }
 
 
-def _cached_system() -> list[dict]:
-    """System prompt as a cache-enabled content block. Must be a list, not a plain string."""
-    return [
-        {
-            "type": "text",
-            "text": SYSTEM_PROMPT,
-            "cache_control": {"type": "ephemeral"},
-        }
-    ]
-
-
 def generate_research_questions(
-    client: anthropic.Anthropic,
+    client,
+    backend: Backend,
+    model: str,
     topic: str,
     research_type: str,
 ) -> list[str]:
-    """
-    Call 1 of 6. Generates 5 focused PM research questions.
-    Raises ValueError if Claude returns a malformed response.
-    """
+    """Generates 5 focused PM research questions. Raises ValueError on malformed output."""
     guidance = TYPE_GUIDANCE.get(research_type, "")
     prompt = (
         f"Topic: {topic}\n"
@@ -103,32 +92,23 @@ def generate_research_questions(
         f"{research_type} a PM could act on.\n\n"
         "Return only the 5 questions, numbered 1–5. No preamble, no explanation."
     )
-
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=600,
-        system=_cached_system(),
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    text = response.content[0].text.strip()
-    # Handles "1." "1)" "1:" formats
+    text = complete(client, backend, SYSTEM_PROMPT, prompt, 600, model)
     questions = re.findall(r"^\s*\d+[.):\s]+(.+)$", text, re.MULTILINE)
     if len(questions) < 3:
-        raise ValueError(f"Unexpected question format from Claude: {text[:300]}")
+        raise ValueError(f"Unexpected question format: {text[:300]}")
     return questions[:5]
 
 
 def research_question(
-    client: anthropic.Anthropic,
+    client,
+    backend: Backend,
+    model: str,
     topic: str,
     research_type: str,
     question: str,
     question_index: int,
 ) -> str:
-    """
-    Calls 2–6. Researches a single question. Returns markdown prose.
-    """
+    """Researches a single question. Returns markdown prose."""
     prompt = (
         f"Topic: {topic}\n"
         f"Research type: {research_type}\n"
@@ -138,87 +118,56 @@ def research_question(
         "Be specific about mechanics, numbers where known, and the PM-relevant implications. "
         "No hedging language."
     )
-
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=MAX_TOKENS_QUESTION,
-        system=_cached_system(),
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return response.content[0].text.strip()
+    return complete(client, backend, SYSTEM_PROMPT, prompt, MAX_TOKENS_QUESTION, model)
 
 
 def compile_report_stream(
-    client: anthropic.Anthropic,
+    client,
+    backend: Backend,
+    model: str,
     topic: str,
     research_type: str,
     questions: list[str],
     findings: list[str],
-):
-    """
-    Final call. Compiles findings into a formatted PM report.
-    Returns a streaming context manager — iterate over .text_stream for deltas.
-
-    Usage:
-        with compile_report_stream(...) as stream:
-            for text in stream.text_stream:
-                # append to buffer, update UI
-    """
+) -> Generator[str, None, None]:
+    """Compiles findings into a formatted PM report. Yields text chunks."""
     report_date = date.today().isoformat()
-
     findings_block = "\n\n".join(
         f"### Research Question {i + 1}: {q}\n\n{f}"
         for i, (q, f) in enumerate(zip(questions, findings))
     )
-
     compile_prompt = (
-        f'You are compiling a {research_type} on "{topic}" for a PM portfolio.\n\n'
+        f'Compile a {research_type} on "{topic}" for a PM portfolio.\n\n'
         f"Date: {report_date}\n\n"
-        "Raw research findings follow. Compile these into a polished, cohesive report "
-        "using this exact structure:\n\n"
+        "Use this exact structure:\n\n"
         f"# {topic} — {research_type}\n"
         f"*Generated: {report_date}*\n\n"
         "## Executive Summary\n"
-        "[2–3 sentences. The sharpest insight first. "
-        "What does someone need to know before reading further?]\n\n"
+        "[2–3 sentences. Sharpest insight first.]\n\n"
         "## Research Questions\n"
         "[Numbered list of the 5 research questions]\n\n"
         "## Key Findings\n\n"
-        "### [Q1 title rewritten as an argument, not a topic]\n"
+        "### [Q1 title rewritten as an argument]\n"
         "[Integrated findings + synthesis]\n\n"
-        "### [Q2 title]\n"
-        "[etc.]\n\n"
+        "### [Q2 title]\n[etc.]\n\n"
         "## Strategic Implications\n"
-        "[3–5 paragraphs. PM-level so-what. What should a PM building in this space "
-        "do differently? What bets are implied? What trade-offs are real?]\n\n"
+        "[3–5 paragraphs. PM-level so-what.]\n\n"
         "## Open Questions\n"
-        "[3–5 specific questions this research surfaces but doesn't answer. "
-        "Not 'further research is needed' — actual specific questions worth investigating.]\n\n"
-        "Preserve the analytical voice. Eliminate hedging. Sharpen transitions. "
-        "The Executive Summary must be a thesis statement, not a table of contents.\n\n"
-        "---\n\n"
+        "[3–5 specific questions this research surfaces but doesn't answer.]\n\n"
+        "Eliminate hedging. Executive Summary must be a thesis, not a table of contents.\n\n"
         f"RAW FINDINGS:\n\n{findings_block}"
     )
-
-    return client.messages.stream(
-        model=MODEL,
-        max_tokens=MAX_TOKENS_COMPILE,
-        system=_cached_system(),
-        messages=[{"role": "user", "content": compile_prompt}],
+    yield from stream_complete(
+        client, backend, SYSTEM_PROMPT, compile_prompt, MAX_TOKENS_COMPILE, model
     )
 
 
 def save_report(topic: str, research_type: str, content: str) -> Path:
-    """
-    Writes the report to portfolio/research-reports/<slug>-<type>-<date>.md.
-    Returns the Path of the written file.
-    """
+    """Writes to portfolio/research-reports/<slug>-<type>-<date>.md."""
     RESEARCH_REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-
     slug = re.sub(r"[^a-z0-9]+", "-", topic.lower()).strip("-")
     type_slug = research_type.lower().replace(" ", "-")
     filename = f"{slug}-{type_slug}-{date.today().isoformat()}.md"
     path = RESEARCH_REPORTS_DIR / filename
-
     path.write_text(content, encoding="utf-8")
     return path

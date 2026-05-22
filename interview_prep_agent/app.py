@@ -1,15 +1,18 @@
 """
 PM Interview Prep Agent — Streamlit UI.
 Run: streamlit run app.py
-Requires ANTHROPIC_API_KEY in .env or sidebar input.
+
+Backends:
+  Ollama (local, free) — requires Ollama running at localhost:11434
+  Claude API — requires ANTHROPIC_API_KEY
 """
 
 import os
 
-import anthropic
 import streamlit as st
 from dotenv import load_dotenv
 
+from llm import OLLAMA_DEFAULT_MODEL, Backend, make_client
 from agent import (
     compile_prep_guide_stream,
     generate_company_brief,
@@ -20,19 +23,9 @@ from agent import (
 
 load_dotenv()
 
-ROLE_LEVELS = [
-    "IC4",
-    "IC5 / Staff",
-    "Senior Staff",
-    "Director",
-    "Group PM",
-]
+ROLE_LEVELS = ["IC4", "IC5 / Staff", "Senior Staff", "Director", "Group PM"]
 
-st.set_page_config(
-    page_title="PM Interview Prep",
-    page_icon="🎯",
-    layout="wide",
-)
+st.set_page_config(page_title="PM Interview Prep", page_icon="🎯", layout="wide")
 
 
 def _init_session_state() -> None:
@@ -64,21 +57,27 @@ def _reset_state() -> None:
 
 _init_session_state()
 
-# --- SIDEBAR ---
 with st.sidebar:
     st.title("PM Interview Prep")
-    st.markdown(
-        "Generates a tailored prep guide using Claude. "
-        "Saves to `portfolio/interview-prep/`."
-    )
+    st.markdown("Generates tailored PM interview prep guides. Saves to `portfolio/interview-prep/`.")
     st.divider()
 
-    api_key = st.text_input(
-        "Anthropic API Key",
-        type="password",
-        value=os.getenv("ANTHROPIC_API_KEY", ""),
-        help="Get your key at console.anthropic.com",
+    backend: Backend = st.radio(
+        "Backend",
+        options=["ollama", "claude"],
+        format_func=lambda x: "Ollama (local, free)" if x == "ollama" else "Claude API",
+        index=0,
     )
+
+    if backend == "ollama":
+        model = st.text_input("Ollama model", value=OLLAMA_DEFAULT_MODEL)
+        api_key = ""
+        st.caption("Ollama must be running at localhost:11434.")
+    else:
+        model = ""
+        api_key = st.text_input(
+            "Anthropic API Key", type="password", value=os.getenv("ANTHROPIC_API_KEY", "")
+        )
 
     st.divider()
     if st.session_state.prep_complete:
@@ -86,99 +85,81 @@ with st.sidebar:
     else:
         st.markdown("**Status:** Ready")
 
-# --- MAIN ---
 st.title("PM Interview Prep")
 
 col_company, col_level = st.columns([3, 1])
-
 with col_company:
-    company_input = st.text_input(
-        "Target company",
-        placeholder="e.g., Stripe, Notion, Datadog",
-    )
-
+    company_input = st.text_input("Target company", placeholder="e.g., Stripe, Notion, Datadog")
 with col_level:
     role_level = st.selectbox("Role level", options=ROLE_LEVELS)
 
-can_run = bool(company_input and api_key)
-run_button = st.button("Generate Prep Guide", type="primary", disabled=not can_run)
+ready = (backend == "ollama" and bool(company_input)) or (
+    backend == "claude" and bool(company_input and api_key)
+)
+run_button = st.button("Generate Prep Guide", type="primary", disabled=not ready)
 
-if not api_key:
+if backend == "claude" and not api_key:
     st.caption("Enter your Anthropic API key in the sidebar.")
-elif not company_input:
-    st.caption("Enter a target company above.")
 
-# --- EXECUTION ---
-if run_button and can_run:
+if run_button and ready:
     _reset_state()
     st.session_state.guide_company = company_input
     st.session_state.guide_level = role_level
 
-    client = anthropic.Anthropic(api_key=api_key)
+    try:
+        client = make_client(backend, api_key)
+    except Exception as e:  # noqa: BLE001
+        st.error(f"Failed to connect: {e}")
+        st.stop()
+
     progress = st.progress(0, text="Starting...")
     status = st.empty()
 
     try:
-        status.markdown(f"**Step 1 / 4** — Researching {company_input} PM culture...")
-        brief = generate_company_brief(client, company_input, role_level)
+        status.markdown(f"**Step 1 / 4** — Researching {company_input}...")
+        brief = generate_company_brief(client, backend, model, company_input, role_level)
         st.session_state.brief = brief
-        progress.progress(1 / 5, text="Company brief ready")
+        progress.progress(1 / 5)
 
         status.markdown("**Step 2 / 4** — Identifying interview themes...")
-        themes = generate_interview_themes(client, company_input, role_level, brief)
+        themes = generate_interview_themes(client, backend, model, company_input, role_level, brief)
         st.session_state.themes = themes
-        progress.progress(2 / 5, text="Themes identified")
+        progress.progress(2 / 5)
 
-        status.markdown("**Step 3 / 4** — Generating questions by theme...")
-        questions = generate_questions_by_theme(client, company_input, role_level, themes)
+        status.markdown("**Step 3 / 4** — Generating questions...")
+        questions = generate_questions_by_theme(client, backend, model, company_input, role_level, themes)
         st.session_state.questions = questions
-        progress.progress(3 / 5, text="Questions ready")
+        progress.progress(3 / 5)
 
-        status.markdown("**Step 4 / 4** — Compiling prep guide...")
+        status.markdown("**Step 4 / 4** — Compiling guide...")
         guide_area = st.empty()
         full_guide = ""
 
-        with compile_prep_guide_stream(
-            client, company_input, role_level, brief, themes, questions
-        ) as stream:
-            for text in stream.text_stream:
-                full_guide += text
-                guide_area.markdown(full_guide)
+        for text in compile_prep_guide_stream(
+            client, backend, model, company_input, role_level, brief, themes, questions
+        ):
+            full_guide += text
+            guide_area.markdown(full_guide)
 
         st.session_state.guide = full_guide
         st.session_state.prep_complete = True
         progress.progress(1.0, text="Complete")
         status.empty()
 
-    except anthropic.AuthenticationError:
-        st.session_state.error = "API key is invalid."
-        progress.empty()
-        status.empty()
-    except anthropic.RateLimitError:
-        st.session_state.error = "Rate limit reached. Wait a moment and try again."
-        progress.empty()
-        status.empty()
-    except anthropic.APIConnectionError as e:
-        st.session_state.error = f"Connection error: {e}"
-        progress.empty()
-        status.empty()
-    except ValueError as e:
-        st.session_state.error = f"Generation error: {e}"
-        progress.empty()
-        status.empty()
     except Exception as e:  # noqa: BLE001
-        st.session_state.error = f"Unexpected error ({type(e).__name__}): {e}"
+        err = str(e)
+        if "connection" in err.lower() or "refused" in err.lower():
+            st.session_state.error = "Cannot reach Ollama at localhost:11434. Run: ollama serve"
+        else:
+            st.session_state.error = f"Error ({type(e).__name__}): {e}"
         progress.empty()
         status.empty()
 
-# --- ERROR ---
 if st.session_state.error:
     st.error(st.session_state.error)
 
-# --- OUTPUT ---
 if st.session_state.prep_complete and st.session_state.guide:
     st.divider()
-
     col_save, col_dl, _ = st.columns([1, 1, 4])
 
     with col_save:

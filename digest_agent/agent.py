@@ -1,16 +1,17 @@
 """
-PM Digest Generator — Claude API orchestration layer.
-No Streamlit dependencies. All functions independently testable.
+PM Digest Generator — LLM orchestration layer.
+Supports Ollama (local) and Claude API backends via llm.py.
+No Streamlit dependencies.
 """
 
 import re
 from datetime import date
 from pathlib import Path
+from typing import Generator
 
-import anthropic
+from llm import Backend, complete, stream_complete
 
 DIGESTS_DIR = Path(__file__).parent.parent / "portfolio" / "digests"
-MODEL = "claude-sonnet-4-6"
 MAX_TOKENS_TOPIC = 600
 MAX_TOKENS_COMPILE = 3000
 
@@ -21,98 +22,60 @@ Writing principles:
 - "What moved" means a concrete signal, not a category update — name the specific thing
 - Strategic implication is PM-centric: what does this mean for how you build, price, or position?
 - Open questions are specific and answerable — not "further research needed"
-- Acknowledge knowledge cutoff honestly when relevant: Claude's training has a cutoff date, \
-so treat recent signals as directional, not confirmed
+- Acknowledge knowledge cutoff honestly when relevant
 - No filler: no "it is worth noting," "this highlights," or "in conclusion"
 - Tone is collegial and direct — written for someone who reads this at 7am with coffee"""
 
 
-def _cached_system() -> list[dict]:
-    return [
-        {
-            "type": "text",
-            "text": SYSTEM_PROMPT,
-            "cache_control": {"type": "ephemeral"},
-        }
-    ]
-
-
-def research_topic(
-    client: anthropic.Anthropic,
-    topic: str,
-    time_horizon: str,
-) -> str:
-    """
-    One call per topic. Returns structured prose covering what moved,
-    why it matters, and the open question. max_tokens=600.
-    """
+def research_topic(client, backend: Backend, model: str, topic: str, time_horizon: str) -> str:
+    """One call per topic. Returns structured prose covering what moved, why it matters, open question."""
     prompt = (
         f"Topic: {topic}\n"
         f"Time horizon: {time_horizon}\n\n"
-        "Write a briefing entry for this topic covering:\n"
+        "Write a briefing entry covering:\n"
         "1. **What moved** — the most significant concrete signal or development "
-        f"in this space {time_horizon.lower()}. If your training knowledge doesn't "
-        "cover this period, note that and give the most recent directional signal you have.\n"
-        "2. **Why it matters for PMs** — the strategic implication, specifically for "
-        "someone building platform products, developer tools, or API infrastructure\n"
+        f"in this space {time_horizon.lower()}. If your training doesn't cover this period, "
+        "note that and give the most recent directional signal you have.\n"
+        "2. **Why it matters for PMs** — the strategic implication for someone building "
+        "platform products, developer tools, or API infrastructure\n"
         "3. **Open question** — one specific, tractable question this surfaces\n\n"
         "Use those three headers. 2–3 sentences per section. No preamble."
     )
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=MAX_TOKENS_TOPIC,
-        system=_cached_system(),
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return response.content[0].text.strip()
+    return complete(client, backend, SYSTEM_PROMPT, prompt, MAX_TOKENS_TOPIC, model)
 
 
 def compile_digest_stream(
-    client: anthropic.Anthropic,
+    client,
+    backend: Backend,
+    model: str,
     topics: list[str],
     findings: list[str],
     time_horizon: str,
-):
-    """
-    Final call (streamed). Assembles the full digest with cross-cutting themes.
-    Returns a streaming context manager — iterate over .text_stream.
-    """
+) -> Generator[str, None, None]:
+    """Assembles the full digest with cross-cutting themes. Yields text chunks."""
     digest_date = date.today().isoformat()
     topics_list = ", ".join(topics)
-
     findings_block = "\n\n---\n\n".join(
-        f"## {topic}\n\n{finding}"
-        for topic, finding in zip(topics, findings)
+        f"## {topic}\n\n{finding}" for topic, finding in zip(topics, findings)
     )
-
     prompt = (
         f"Compile a PM digest from the following topic briefings.\n\n"
         f"Date: {digest_date}\n"
         f"Topics: {topics_list}\n"
         f"Horizon: {time_horizon}\n\n"
-        "Use this structure exactly:\n\n"
+        "Structure:\n\n"
         f"# PM Digest — {digest_date}\n"
         f"*Topics: {topics_list} | Horizon: {time_horizon}*\n"
-        "*Note: Based on Claude's training knowledge — verify specifics before acting on them.*\n\n"
+        "*Note: Based on training knowledge — verify specifics before acting on them.*\n\n"
         "## Cross-Cutting Themes\n"
-        "[1–2 paragraphs on what connects this week's topics. "
-        "What common dynamic is playing out across them?]\n\n"
-        "[Then one section per topic, using the briefings below as raw material. "
-        "Keep the three-header structure (What moved / Why it matters / Open question) "
-        "but synthesize and sharpen the prose.]\n\n"
+        "[1–2 paragraphs on what connects these topics]\n\n"
+        "[One section per topic using the briefings below — keep What moved / "
+        "Why it matters / Open question structure but sharpen the prose]\n\n"
         "## What to Watch\n"
-        "[2–3 specific forward-looking signals across all topics — "
-        "the things worth monitoring over the next 30–60 days]\n\n"
-        "---\n\n"
+        "[2–3 forward-looking signals across all topics for the next 30–60 days]\n\n"
         f"RAW BRIEFINGS:\n\n{findings_block}"
     )
-
-    return client.messages.stream(
-        model=MODEL,
-        max_tokens=MAX_TOKENS_COMPILE,
-        system=_cached_system(),
-        messages=[{"role": "user", "content": prompt}],
-    )
+    yield from stream_complete(client, backend, SYSTEM_PROMPT, prompt, MAX_TOKENS_COMPILE, model)
 
 
 def save_digest(topics: list[str], content: str) -> Path:
@@ -125,7 +88,7 @@ def save_digest(topics: list[str], content: str) -> Path:
 
 
 def parse_topics(raw: str) -> list[str]:
-    """Parses comma-separated or newline-separated topic list. Returns up to 6 topics."""
+    """Parses comma-separated or newline-separated topic list. Returns up to 6."""
     if "," in raw:
         topics = [t.strip() for t in raw.split(",")]
     else:
